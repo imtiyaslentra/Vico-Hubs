@@ -870,49 +870,64 @@ autoparryvar = RunService.Heartbeat:Connect(function()
     end
 
     -- Anti-curve mechanism
-    if ball_Speed < 25 or ball_Velocity.Y > 10 then
-        aura_table.hit_Time = tick() * 10
-        aura_table.hit_Count = 0
+if ball_Speed < 25 or ball_Velocity.Y > 10 then
+    aura_table.hit_Time = tick() * 10
+    aura_table.hit_Count = 0
+    aura_table.is_ball_Warping = false
+    aura_table.is_Spamming = false
+    aura_table.canParry = true
+    aura_table.last_target = nil
+end
+
+local player_Velocity = local_player.Character.HumanoidRootPart.AssemblyLinearVelocity
+local player_isMoving = player_Velocity.Magnitude > 0
+local ball_speed_Limited = math.min(ball_Speed / 1000, 0.1)
+local targetPosition = closest_Entity_To_mouse.HumanoidRootPart.Position
+local target_Distance = local_player:DistanceFromCharacter(targetPosition)
+local closest_target_Distance = local_player:DistanceFromCharacter(closest_Entity.HumanoidRootPart.Position)
+local target_distance_Limited = math.min(target_Distance / 10000, 0.1)
+local target_Direction = (local_player.Character.PrimaryPart.Position - closest_Entity.HumanoidRootPart.Position).Unit
+local target_Velocity = closest_Entity.HumanoidRootPart.AssemblyLinearVelocity
+local target_isMoving = target_Velocity.Magnitude > 0
+local target_Dot = target_isMoving and math.max(target_Direction:Dot(target_Velocity.Unit), 0)
+
+aura_table.spam_Range = math.clamp(math.max(math.max(ping / 8.5, 15) + ball_Speed / 7.5, 8.4), 25, 1200)
+speedFactor = 3 - (ping / 100)
+speedFactorPingBased = 6.1 - (ping / 100)
+aura_table.parry_Range = math.max(math.max(ping, 3.5) + ball_Speed / speedFactor, speedFactorPingBased)
+
+-- Additional Anti-curve mechanism
+local ball_Position_Change = ball_Velocity.Magnitude - previous_ball_Velocity.Magnitude
+if math.abs(ball_Position_Change) > 15 then -- Deteksi perubahan arah yang tajam
+    aura_table.is_ball_Curving = true
+else
+    aura_table.is_ball_Curving = false
+end
+previous_ball_Velocity = ball_Velocity
+
+aura_table.is_Spamming = aura_table.hit_Count > 1 or (target_Distance <= aura_table.spam_Range and ball_Distance < 18 and ball_Speed > 8) and ball_Velocity.Y > -50 and ball_Dot > 0.15
+
+-- Sharp curve handling
+task.spawn(function()
+    if (tick() - aura_table.ball_Warping) >= 0.15 + target_distance_Limited - ball_speed_Limited or ball_Distance <= 10 then
         aura_table.is_ball_Warping = false
-        aura_table.is_Spamming = false
-        aura_table.canParry = true
-        aura_table.last_target = nil
+        return
     end
 
-    local player_Velocity = local_player.Character.HumanoidRootPart.AssemblyLinearVelocity
-    local player_isMoving = player_Velocity.Magnitude > 0
-    local ball_speed_Limited = math.min(ball_Speed / 1000, 0.1)
-    local targetPosition = closest_Entity_To_mouse.HumanoidRootPart.Position
-    local target_Distance = local_player:DistanceFromCharacter(targetPosition)
-    local closest_target_Distance = local_player:DistanceFromCharacter(closest_Entity.HumanoidRootPart.Position)
-    local target_distance_Limited = math.min(target_Distance / 10000, 0.1)
-    local target_Direction = (local_player.Character.PrimaryPart.Position - closest_Entity.HumanoidRootPart.Position).Unit
-    local target_Velocity = closest_Entity.HumanoidRootPart.AssemblyLinearVelocity
-    local target_isMoving = target_Velocity.Magnitude > 0
-    local target_Dot = target_isMoving and math.max(target_Direction:Dot(target_Velocity.Unit), 0)
-
-    aura_table.spam_Range = math.clamp(math.max(math.max(ping / 8.5, 15) + ball_Speed / 7.5, 8.4), 25, 1200)
-    speedFactor = 3 - (ping / 100)
-    speedFactorPingBased = 6.1 - (ping / 100)
-    aura_table.parry_Range = math.max(math.max(ping, 3.5) + ball_Speed / speedFactor, speedFactorPingBased)
-
-    aura_table.is_Spamming = aura_table.hit_Count > 1 or (target_Distance <= aura_table.spam_Range and ball_Distance < 18 and ball_Speed > 8) and ball_Velocity.Y > -50 and ball_Dot > 0.15
-
-    task.spawn(function()
-        if (tick() - aura_table.ball_Warping) >= 0.15 + target_distance_Limited - ball_speed_Limited or ball_Distance <= 10 then
+    if aura_table.last_target then
+        if (ball_Position - aura_table.last_target.HumanoidRootPart.Position).Magnitude > 35.5 or target_Distance <= 12 then
             aura_table.is_ball_Warping = false
-            return
         end
+    end
 
-        if aura_table.last_target then
-            if (ball_Position - aura_table.last_target.HumanoidRootPart.Position).Magnitude > 35.5 or target_Distance <= 12 then
-                aura_table.is_ball_Warping = false
-            end
-        end
-
+    -- Additional condition for fast ball handling
+    if ball_Speed > 100 and ball_Velocity.Y < -50 then
         aura_table.is_ball_Warping = true
-    end)
-
+    else
+        aura_table.is_ball_Warping = true
+    end
+end)
+		
     -- Predecir la posición de la pelota
     local predicted_ball_Position = linear_predict(ball_Position, ball_Position + ball_Velocity * (ping / 100), 0.5)
 
